@@ -97,7 +97,7 @@ namespace Research_Arcade_Updater.Services
             }
             catch (Exception)
             {
-                OnStateChanged(UpdaterState.failed);
+                OnStateChanged(UpdaterState.idle);
             }
         }
 

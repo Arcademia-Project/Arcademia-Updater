@@ -144,18 +144,7 @@ namespace Research_Arcade_Updater
             // Store the start time
             DateTime startTime = DateTime.Now;
 
-            // Check for an internet connection
-            while (!CanPing("google.com"))
-            {
-                State = UpdaterState.waitingOnInternet;
-
-                // If the application has been waiting for 60 seconds, open the launcher without checking for updates
-                if ((DateTime.Now - startTime).TotalSeconds > 60)
-                {
-                    StartLauncher();
-                    return;
-                }
-            }
+            //StartLauncher();
 
             // Initialize the update timer
             Task.Run(async () =>
@@ -169,20 +158,6 @@ namespace Research_Arcade_Updater
                     await CheckForUpdates();
                 }
             });
-        }
-
-        static bool CanPing(string host)
-        {
-            try
-            {
-                using Ping ping = new();
-                PingReply reply = ping.Send(host, 1000);
-                return reply.Status == IPStatus.Success;
-            }
-            catch
-            {
-                return false;
-            }
         }
 
         private void Updater_StateChanged(object sender, LauncherStateChangedEventArgs e) => Dispatcher.Invoke(() => State = e.NewState);

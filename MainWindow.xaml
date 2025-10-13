@@ -11,7 +11,7 @@
         WindowStyle="None"
         Title="Updater" Height="450" Width="800">
     <Window.Resources>
-        <System:String x:Key="UpdaterVersion">[v2.2.0-25 Updater Release Build]</System:String>
+        <System:String x:Key="UpdaterVersion">[v2.2.1-25 Updater Release Build]</System:String>
         <Style x:Key="Early GameBoy">
             <Setter Property="TextElement.FontFamily" Value="/Fonts/#Press Start 2P"/>
         </Style>
