@@ -34,10 +34,13 @@ namespace Research_Arcade_Updater.Services
                 var errorMessage = await response.Content.ReadAsStringAsync();
 
                 if (response.StatusCode == System.Net.HttpStatusCode.BadRequest || response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                    _logger.LogWarning("Warning: {message}", errorMessage);
+                {
+                    if (_logger.IsEnabled(LogLevel.Warning))
+                        _logger.LogWarning("[ApiClient] Warning whilst executing GetLatestLauncherVersionAsync: {message}", errorMessage);
+                }
 
-                else
-                    _logger.LogError("Unexpected error: {StatusCode}", response.StatusCode);
+                else if (_logger.IsEnabled(LogLevel.Error))
+                    _logger.LogError("[ApiClient] Unexpected error whilst executing GetLatestLauncherVersionAsync: {StatusCode}", response.StatusCode);
 
                 throw new InvalidOperationException("Failed to retrieve LauncherInfo.");
             }
@@ -79,13 +82,17 @@ namespace Research_Arcade_Updater.Services
                 var errorMessage = await response.Content.ReadAsStringAsync();
 
                 if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
-                    _logger.LogWarning("Bad Request: {message}", errorMessage);
-
+                {
+                    if (_logger.IsEnabled(LogLevel.Warning))
+                        _logger.LogWarning("[ApiClient] Bad Request: {message}", errorMessage);
+                }
                 else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                    _logger.LogWarning("Not Found: {message}", errorMessage);
-
-                else
-                    _logger.LogError("Unexpected error: {StatusCode}", response.StatusCode);
+                {
+                    if (_logger.IsEnabled(LogLevel.Warning))
+                        _logger.LogWarning("[ApiClient] Not Found: {message}", errorMessage);
+                }
+                else if (_logger.IsEnabled(LogLevel.Error))
+                    _logger.LogError("[ApiClient] Unexpected error whilst executing UpdateRemoteLauncherVersionAsync: {StatusCode}", response.StatusCode);
             }
             response.EnsureSuccessStatusCode();
 

@@ -54,19 +54,20 @@ namespace Research_Arcade_Updater.Services
 
             try
             {
-                _logger.LogInformation("Resetting remote machine launcher version...");
+                _logger.LogInformation("[UpdaterService] Resetting remote machine launcher version...");
+
                 bool result = await _apiClient.UpdateRemoteLauncherVersionAsync("0.0.0", _logger);
 
                 if (result)
-                    _logger.LogInformation("Successfully reset remote machine launcher version.");
+                    _logger.LogInformation("[UpdaterService] Successfully reset remote machine launcher version.");
                 else
-                    _logger.LogWarning("Failed to reset remote machine launcher version.");
+                    _logger.LogWarning("[UpdaterService] Failed to reset remote machine launcher version.");
 
                 OnStateChanged(UpdaterState.idle);
             }
             catch (Exception)
             {
-                _logger.LogError("Error resetting remote machine launcher version.");
+                _logger.LogError("[UpdaterService] Error resetting remote machine launcher version.");
                 OnStateChanged(UpdaterState.failed);
             }
         }
@@ -74,7 +75,7 @@ namespace Research_Arcade_Updater.Services
         public async Task CheckAndUpdateAsync(CancellationToken cancellationToken)
         {
             OnStateChanged(UpdaterState.checkingForUpdates);
-            _logger.LogInformation("Checking for updates...");
+            _logger.LogInformation("[UpdaterService] Checking for launcher updates...");
             try
             {
                 Version latestVersion = new(await _apiClient.GetLatestLauncherVersionAsync(_logger));
@@ -86,9 +87,9 @@ namespace Research_Arcade_Updater.Services
                     bool updateResult = await _apiClient.UpdateRemoteLauncherVersionAsync(latestVersion.ToString(), _logger);
 
                     if (updateResult)
-                        _logger.LogInformation("Successfully updated launcher version to {VersionNumber}.", latestVersion);
+                        _logger.LogInformation("[UpdaterService] Successfully updated launcher version to {VersionNumber}.", latestVersion);
                     else
-                        _logger.LogWarning("Failed to update launcher version to {VersionNumber}.", latestVersion);
+                        _logger.LogWarning("[UpdaterService] Failed to update launcher version to {VersionNumber}.", latestVersion);
                 }
                 catch (Exception)
                 {
@@ -107,7 +108,7 @@ namespace Research_Arcade_Updater.Services
             LauncherRestartRequired();
 
             _logger.LogInformation(
-                "Downloading launcher version: {VersionNumber}",
+                "[UpdaterService] Downloading launcher version: {VersionNumber}",
                 versionNumber
             );
 
@@ -124,7 +125,7 @@ namespace Research_Arcade_Updater.Services
                 await zipStream.CopyToAsync(fileStream, cancellationToken);
 
             _logger.LogInformation(
-                "Launcher downloaded successfully: {VersionNumber}",
+                "[UpdaterService] Launcher downloaded successfully: {VersionNumber}",
                 versionNumber
             );
 
