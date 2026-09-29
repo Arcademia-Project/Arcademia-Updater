@@ -49,11 +49,11 @@ namespace Research_Arcade_Updater.Services
 
         public async Task<bool> IsUpdateAvailableAsync(CancellationToken cancellationToken)
         {
-            var latest = await _apiClient.GetLatestLauncherVersionAsync(_logger, cancellationToken);
+            var manifest = _installer.ReadManifest();
+            var latest = await _apiClient.GetLatestLauncherVersionAsync(manifest?.Version, _logger, cancellationToken);
             if (latest.Status != LatestLauncherStatus.UpdateAvailable)
                 return false;
 
-            var manifest = _installer.ReadManifest();
             return manifest?.Version != latest.VersionNumber;
         }
 
@@ -70,7 +70,8 @@ namespace Research_Arcade_Updater.Services
                 reason == null ? "" : $" - {reason}"
             );
 
-            var latest = await _apiClient.GetLatestLauncherVersionAsync(_logger, cancellationToken);
+            var installedVersion = health == InstallHealth.Verified ? manifest?.Version : null;
+            var latest = await _apiClient.GetLatestLauncherVersionAsync(installedVersion, _logger, cancellationToken);
             bool online = latest.Status != LatestLauncherStatus.Unreachable;
 
             string targetVersion = latest.Status == LatestLauncherStatus.UpdateAvailable
@@ -146,6 +147,10 @@ namespace Research_Arcade_Updater.Services
 
         private async Task<string> ResolveCurrentVersionAsync(CancellationToken cancellationToken)
         {
+            var asked = await _apiClient.GetLatestLauncherVersionAsync("0.0.0", _logger, cancellationToken);
+            if (asked.Status == LatestLauncherStatus.UpdateAvailable)
+                return asked.VersionNumber;
+
             _logger.LogInformation("[UpdaterService] Resetting the recorded launcher version to find the current release...");
             try
             {
@@ -157,7 +162,7 @@ namespace Research_Arcade_Updater.Services
                 return null;
             }
 
-            var latest = await _apiClient.GetLatestLauncherVersionAsync(_logger, cancellationToken);
+            var latest = await _apiClient.GetLatestLauncherVersionAsync("0.0.0", _logger, cancellationToken);
             return latest.Status == LatestLauncherStatus.UpdateAvailable ? latest.VersionNumber : null;
         }
 

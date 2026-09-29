@@ -22,6 +22,7 @@ namespace Research_Arcade_Updater.Services
     public interface IApiClient
     {
         Task<LatestLauncherResult> GetLatestLauncherVersionAsync(
+            string installedVersion,
             ILogger<UpdaterService> _logger,
             CancellationToken cancellationToken
         );
@@ -39,6 +40,7 @@ namespace Research_Arcade_Updater.Services
         private readonly HttpClient _http = http;
 
         public async Task<LatestLauncherResult> GetLatestLauncherVersionAsync(
+            string installedVersion,
             ILogger<UpdaterService> _logger,
             CancellationToken cancellationToken
         )
@@ -46,7 +48,10 @@ namespace Research_Arcade_Updater.Services
             HttpResponseMessage response;
             try
             {
-                response = await _http.GetAsync("/api/LauncherVersions/Latest", cancellationToken);
+                response = await _http.GetAsync(
+                    $"/api/LauncherVersions/Latest?currentVersion={Uri.EscapeDataString(installedVersion ?? "0.0.0")}",
+                    cancellationToken
+                );
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
             {
