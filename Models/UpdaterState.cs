@@ -10,5 +10,7 @@
         checkingForUpdates,
         updatingLauncher,
         waitingOnInternet,
+        repairingLauncher,
+        retryingLauncher,
     }
 }

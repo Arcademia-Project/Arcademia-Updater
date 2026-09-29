@@ -1,7 +1,8 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using Research_Arcade_Updater.Models;
 using System;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
@@ -9,9 +10,21 @@ using System.Threading.Tasks;
 
 namespace Research_Arcade_Updater.Services
 {
+    public enum LatestLauncherStatus
+    {
+        UpdateAvailable,
+        UpToDate,
+        Unreachable,
+    }
+
+    public sealed record LatestLauncherResult(LatestLauncherStatus Status, string VersionNumber);
+
     public interface IApiClient
     {
-        Task<string> GetLatestLauncherVersionAsync(ILogger<UpdaterService> _logger);
+        Task<LatestLauncherResult> GetLatestLauncherVersionAsync(
+            ILogger<UpdaterService> _logger,
+            CancellationToken cancellationToken
+        );
         Task<Stream> GetLauncherDownloadAsync(
             string versionNumber,
             CancellationToken cancellationToken
@@ -25,28 +38,41 @@ namespace Research_Arcade_Updater.Services
     {
         private readonly HttpClient _http = http;
 
-        public async Task<string> GetLatestLauncherVersionAsync(ILogger<UpdaterService> _logger)
+        public async Task<LatestLauncherResult> GetLatestLauncherVersionAsync(
+            ILogger<UpdaterService> _logger,
+            CancellationToken cancellationToken
+        )
         {
-            var response = await _http.GetAsync("/api/LauncherVersions/Latest");
-
-            if (!response.IsSuccessStatusCode)
+            HttpResponseMessage response;
+            try
             {
-                var errorMessage = await response.Content.ReadAsStringAsync();
-
-                if (response.StatusCode == System.Net.HttpStatusCode.BadRequest || response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                {
-                    if (_logger.IsEnabled(LogLevel.Warning))
-                        _logger.LogWarning("[ApiClient] Warning whilst executing GetLatestLauncherVersionAsync: {message}", errorMessage);
-                }
-
-                else if (_logger.IsEnabled(LogLevel.Error))
-                    _logger.LogError("[ApiClient] Unexpected error whilst executing GetLatestLauncherVersionAsync: {StatusCode}", response.StatusCode);
-
-                throw new InvalidOperationException("Failed to retrieve LauncherInfo.");
+                response = await _http.GetAsync("/api/LauncherVersions/Latest", cancellationToken);
             }
-            response.EnsureSuccessStatusCode();
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            {
+                if (_logger.IsEnabled(LogLevel.Warning))
+                    _logger.LogWarning("[ApiClient] Could not reach the server: {message}", ex.Message);
+                return new LatestLauncherResult(LatestLauncherStatus.Unreachable, null);
+            }
 
-            return await response.Content.ReadAsStringAsync();
+            using (response)
+            {
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                if (response.IsSuccessStatusCode)
+                    return new LatestLauncherResult(LatestLauncherStatus.UpdateAvailable, body.Trim().Trim('"'));
+
+                if (response.StatusCode == HttpStatusCode.BadRequest && body.Contains("No update needed", StringComparison.OrdinalIgnoreCase))
+                    return new LatestLauncherResult(LatestLauncherStatus.UpToDate, null);
+
+                if (_logger.IsEnabled(LogLevel.Warning))
+                    _logger.LogWarning(
+                        "[ApiClient] Unexpected response from GetLatestLauncherVersionAsync: {StatusCode} {message}",
+                        response.StatusCode,
+                        body
+                    );
+                return new LatestLauncherResult(LatestLauncherStatus.Unreachable, null);
+            }
         }
 
         public async Task<Stream> GetLauncherDownloadAsync(
@@ -56,6 +82,7 @@ namespace Research_Arcade_Updater.Services
         {
             var response = await _http.GetAsync(
                 $"/api/LauncherVersions/Download?versionNumber={versionNumber}",
+                HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken
             );
 

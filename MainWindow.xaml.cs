@@ -1,5 +1,6 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Research_Arcade_Updater.Models;
 using Research_Arcade_Updater.Services;
@@ -8,7 +9,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http.Headers;
-using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -19,22 +19,38 @@ namespace Research_Arcade_Updater
 {
     public partial class MainWindow : Window
     {
-        bool failed = false;
-
-        // Send a key press
-        [DllImport("User32.dll")]
-        public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
-
         [DllImport("User32.dll")]
         public static extern bool SetForegroundWindow(IntPtr hWnd);
 
+        private const string CloseRequestEventName = @"Local\Arcademia.Launcher.CloseRequested";
+
+        private static readonly TimeSpan WindowTimeout = TimeSpan.FromSeconds(60);
+        private static readonly TimeSpan HealthyAfter = TimeSpan.FromSeconds(60);
+        private static readonly TimeSpan UnresponsiveLimit = TimeSpan.FromMinutes(3);
+        private static readonly TimeSpan UpdateInterval = TimeSpan.FromHours(1);
+        private static readonly TimeSpan GracefulCloseTimeout = TimeSpan.FromSeconds(15);
+
+        private enum LauncherOutcome
+        {
+            CleanExit,
+            Crashed,
+            CrashedAfterHealthyRun,
+            Hung,
+            StartFailed,
+            UpdateRequested,
+            Stopped,
+        }
+
         private static IHost _host;
         private readonly IUpdaterService _updater;
+        private readonly ILogger<MainWindow> _logger;
 
         private readonly string rootPath;
-        private readonly string launcherPath;
 
-        private Process launcherProcess = null;
+        private readonly CancellationTokenSource _shutdown = new();
+        private readonly EventWaitHandle _closeRequest;
+        private Task _supervisor = Task.CompletedTask;
+        private bool _shutdownComplete;
 
         private UpdaterState _state;
         internal UpdaterState State
@@ -75,6 +91,12 @@ namespace Research_Arcade_Updater
                                 case UpdaterState.waitingOnInternet:
                                     StatusText.Text = "Waiting for an internet connection...";
                                     break;
+                                case UpdaterState.repairingLauncher:
+                                    StatusText.Text = "Repairing Launcher...";
+                                    break;
+                                case UpdaterState.retryingLauncher:
+                                    StatusText.Text = "Launcher stopped unexpectedly, retrying...";
+                                    break;
                                 default:
                                     break;
                             }
@@ -106,13 +128,11 @@ namespace Research_Arcade_Updater
 
             JObject config = JObject.Parse(File.ReadAllText(configPath));
 
-            launcherPath = Path.Combine(rootPath, "Launcher");
-
             // Create the Launcher directory if it does not exist
-            if (!Directory.Exists(launcherPath))
-                Directory.CreateDirectory(launcherPath);
+            Directory.CreateDirectory(Path.Combine(rootPath, "Launcher"));
 
             _host = Host.CreateDefaultBuilder()
+                .ConfigureLogging(logging => logging.AddProvider(new FileLoggerProvider(Path.Combine(rootPath, "Logs"))))
                 .ConfigureServices((context, services) => {
                     var host = config["ApiHost"]?.ToString() ?? "https://localhost:5001";
                     var user = config["ApiUser"]?.ToString() ?? "Research-Arcade-User";
@@ -124,48 +144,47 @@ namespace Research_Arcade_Updater
                         .AddHttpClient<IApiClient, ApiClient>(client =>
                         {
                             client.BaseAddress = new Uri(host);
+                            client.Timeout = TimeSpan.FromSeconds(30);
                             client.DefaultRequestHeaders.Authorization =
                                 new AuthenticationHeaderValue("ArcadeMachine", creds);
                         });
 
+                    services.AddSingleton<LauncherInstaller>();
                     services.AddSingleton<IUpdaterService, UpdaterService>();
                 })
                 .Build();
 
+            _logger = _host.Services.GetRequiredService<ILogger<MainWindow>>();
             _updater = _host.Services.GetRequiredService<IUpdaterService>();
             _updater.StateChanged += Updater_StateChanged;
-            _updater.OnLauncherRestartRequired += RestartLauncher;
+
+            _closeRequest = new EventWaitHandle(false, EventResetMode.AutoReset, CloseRequestEventName);
+            _closeRequest.Reset();
+
+            _logger.LogInformation("[Updater] Started in {Root}", rootPath);
 
             // Find the Launcher process and close it
-            Process[] processes = Process.GetProcessesByName("Research-Arcade-Launcher");
-            foreach (Process process in processes)
-                process.Kill();
+            _updater.StopLaunchers();
 
-            // Store the start time
-            DateTime startTime = DateTime.Now;
-
-            //StartLauncher();
-
-            // Initialize the update timer
-            Task.Run(async () =>
-            {
-                await CheckForUpdates();
-
-                while (true)
-                {
-                    // Wait 1 hour before checking for updates again
-                    await Task.Delay(60 * 60 * 1000);
-                    await CheckForUpdates();
-                }
-            });
+            _supervisor = Task.Run(() => SuperviseAsync(_shutdown.Token));
         }
 
-        private void Updater_StateChanged(object sender, LauncherStateChangedEventArgs e) => Dispatcher.Invoke(() => State = e.NewState);
-        private void RestartLauncher(object sender, EventArgs e) => CloseLauncher();
+        private void Updater_StateChanged(object sender, LauncherStateChangedEventArgs e) => State = e.NewState;
+
         private async void Window_Closing(object sender, CancelEventArgs e)
         {
+            if (_shutdownComplete)
+                return;
+
+            e.Cancel = true;
+            if (_shutdown.IsCancellationRequested)
+                return;
+
+            _logger?.LogInformation("[Updater] Shutting down");
+            _shutdown.Cancel();
+
             // Close the launcher
-            CloseLauncher();
+            await Task.WhenAny(_supervisor, Task.Delay(GracefulCloseTimeout + TimeSpan.FromSeconds(10)));
 
             // Dispose of the host
             if (_host != null)
@@ -173,94 +192,255 @@ namespace Research_Arcade_Updater
                 await _host.StopAsync();
                 _host.Dispose();
             }
+
+            _shutdownComplete = true;
+            Application.Current.Shutdown();
         }
 
-        private void Launcher_Closing(object sender, CancelEventArgs e)
+        private async Task SuperviseAsync(CancellationToken cancellationToken)
         {
-            launcherProcess = null;
-            State = UpdaterState.restartingLauncher;
+            var repair = RepairLevel.None;
+            int failures = 0;
 
-            // After 5 seconds start the launcher
-            Task.Run(async () =>
+            while (!cancellationToken.IsCancellationRequested)
             {
-                await Task.Delay(5000);
-                await CheckForUpdates();
-            });
-        }
-
-        private void StartLauncher()
-        {
-            if (launcherProcess == null)
-            {
-                State = UpdaterState.startingLauncher;
-
-                // Check if the file exists
-                if (!File.Exists(Path.Combine(launcherPath, "Research-Arcade-Launcher.exe")))
+                bool ready;
+                try
                 {
-                    _updater.ResetRemoteMachineLauncherVersionAsync(CancellationToken.None).ContinueWith((_) => CheckForUpdates());
+                    ready = await _updater.EnsureLauncherReadyAsync(repair, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
                     return;
                 }
-
-                launcherProcess = Process.Start(Path.Combine(launcherPath, "Research-Arcade-Launcher.exe"));
-
-                if (failed)
-                    Task.Delay(1000).ContinueWith((_) => State = UpdaterState.failed);
-
-                // Check if the launcher process has quit
-                Task.Run(async () =>
+                catch (Exception ex)
                 {
-                    while (launcherProcess != null && !launcherProcess.HasExited)
-                        await Task.Delay(1000);
+                    _logger.LogError(ex, "[Updater] Could not prepare the launcher");
+                    ready = false;
+                }
 
-                    Launcher_Closing(null, null);
-                });
+                if (!ready)
+                {
+                    failures++;
+                    State = UpdaterState.retryingLauncher;
+                    await DelayAsync(Backoff(failures), cancellationToken);
+                    continue;
+                }
 
-                // Bring the launcher to the front
-                SetForegroundWindow(launcherProcess.MainWindowHandle);
+                repair = RepairLevel.None;
+
+                var outcome = await RunLauncherAsync(cancellationToken);
+                _logger.LogInformation("[Updater] Launcher finished: {Outcome}", outcome);
+
+                switch (outcome)
+                {
+                    case LauncherOutcome.Stopped:
+                        return;
+                    case LauncherOutcome.CleanExit:
+                    case LauncherOutcome.UpdateRequested:
+                        failures = 0;
+                        break;
+                    case LauncherOutcome.CrashedAfterHealthyRun:
+                        failures = 1;
+                        break;
+                    default:
+                        failures++;
+                        break;
+                }
+
+                repair = failures switch
+                {
+                    <= 1 => RepairLevel.None,
+                    2 => RepairLevel.Reinstall,
+                    _ => RepairLevel.ReinstallAndResetState,
+                };
+
+                if (repair != RepairLevel.None)
+                    _logger.LogWarning("[Updater] {Failures} consecutive launcher failures, next start will use repair level {Repair}", failures, repair);
+
+                State = failures > 0 ? UpdaterState.retryingLauncher : UpdaterState.restartingLauncher;
+                await DelayAsync(failures > 0 ? Backoff(failures) : TimeSpan.FromSeconds(3), cancellationToken);
             }
         }
 
-        private void CloseLauncher()
-        {
-            if (launcherProcess != null)
-            {
-                State = UpdaterState.closingLauncher;
+        private static TimeSpan Backoff(int failures) =>
+            failures <= 3
+                ? TimeSpan.FromSeconds(5)
+                : TimeSpan.FromSeconds(Math.Min(30 * (failures - 3), 300));
 
-                // Send the close key to the launcher
-                keybd_event(69, 0, 0, 0);
-
-                // Wait for the launcher to close
-                launcherProcess?.WaitForExit();
-                launcherProcess = null;
-
-                // Release the close key
-                keybd_event(69, 0, 2, 0);
-            }
-        }
-
-        private async Task CheckForUpdates()
+        private static async Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken)
         {
             try
             {
-                await _updater.CheckAndUpdateAsync(CancellationToken.None);
+                await Task.Delay(delay, cancellationToken);
+            }
+            catch (OperationCanceledException) { }
+        }
 
-                // Start the launcher
-                StartLauncher();
+        private async Task<LauncherOutcome> RunLauncherAsync(CancellationToken cancellationToken)
+        {
+            var exePath = _updater.LauncherExePath;
+            if (!File.Exists(exePath))
+                return LauncherOutcome.StartFailed;
 
-                // After 3 seconds set the state to idle
-                await Task.Delay(3000);
-                State = UpdaterState.idle;
+            State = UpdaterState.startingLauncher;
+            _closeRequest.Reset();
+
+            Process process;
+            try
+            {
+                process = Process.Start(new ProcessStartInfo(exePath)
+                {
+                    WorkingDirectory = rootPath,
+                    UseShellExecute = false,
+                });
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error checking for updates: {ex.Message}");
+                _logger.LogError(ex, "[Updater] Could not start the launcher");
+                return LauncherOutcome.StartFailed;
+            }
 
-                State = UpdaterState.failed;
-                failed = true;
+            if (process == null)
+                return LauncherOutcome.StartFailed;
 
-                // If the application isn't open, open it after 5 seconds
-                await Task.Delay(5000);
-                StartLauncher();
+            var runTime = Stopwatch.StartNew();
+            Stopwatch unresponsiveFor = null;
+            bool windowShown = false;
+            var nextUpdateCheck = DateTime.UtcNow + UpdateInterval;
+
+            try
+            {
+                while (true)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        await CloseLauncherAsync(process, graceful: true);
+                        return LauncherOutcome.Stopped;
+                    }
+
+                    if (process.HasExited)
+                    {
+                        _logger.LogInformation(
+                            "[Updater] Launcher exited with code {ExitCode} after {Seconds:N0}s",
+                            process.ExitCode,
+                            runTime.Elapsed.TotalSeconds
+                        );
+
+                        if (process.ExitCode == 0)
+                            return LauncherOutcome.CleanExit;
+
+                        return windowShown && runTime.Elapsed >= HealthyAfter
+                            ? LauncherOutcome.CrashedAfterHealthyRun
+                            : LauncherOutcome.Crashed;
+                    }
+
+                    process.Refresh();
+
+                    if (!windowShown)
+                    {
+                        if (process.MainWindowHandle != IntPtr.Zero)
+                        {
+                            windowShown = true;
+                            _logger.LogInformation("[Updater] Launcher window shown after {Seconds:N1}s", runTime.Elapsed.TotalSeconds);
+
+                            // Bring the launcher to the front
+                            SetForegroundWindow(process.MainWindowHandle);
+                            State = UpdaterState.idle;
+                        }
+                        else if (runTime.Elapsed > WindowTimeout)
+                        {
+                            _logger.LogError("[Updater] Launcher showed no window within {Seconds}s, treating it as hung", WindowTimeout.TotalSeconds);
+                            await CloseLauncherAsync(process, graceful: false);
+                            return LauncherOutcome.Hung;
+                        }
+                    }
+                    else if (process.Responding)
+                    {
+                        unresponsiveFor = null;
+                    }
+                    else
+                    {
+                        unresponsiveFor ??= Stopwatch.StartNew();
+                        if (unresponsiveFor.Elapsed > UnresponsiveLimit)
+                        {
+                            _logger.LogError("[Updater] Launcher has not responded for {Minutes} minutes, restarting it", UnresponsiveLimit.TotalMinutes);
+                            await CloseLauncherAsync(process, graceful: false);
+                            return LauncherOutcome.Hung;
+                        }
+                    }
+
+                    if (DateTime.UtcNow >= nextUpdateCheck)
+                    {
+                        nextUpdateCheck = DateTime.UtcNow + UpdateInterval;
+
+                        bool updateAvailable = false;
+                        try
+                        {
+                            updateAvailable = await _updater.IsUpdateAvailableAsync(cancellationToken);
+                        }
+                        catch (Exception ex) when (ex is not OperationCanceledException)
+                        {
+                            _logger.LogWarning("[Updater] Scheduled update check failed: {Message}", ex.Message);
+                        }
+
+                        if (updateAvailable)
+                        {
+                            _logger.LogInformation("[Updater] A launcher update is available, closing the launcher to install it");
+                            await CloseLauncherAsync(process, graceful: true);
+                            return LauncherOutcome.UpdateRequested;
+                        }
+                    }
+
+                    try
+                    {
+                        await Task.Delay(1000, cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        await CloseLauncherAsync(process, graceful: true);
+                        return LauncherOutcome.Stopped;
+                    }
+                }
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+
+        private async Task CloseLauncherAsync(Process process, bool graceful)
+        {
+            State = UpdaterState.closingLauncher;
+
+            try
+            {
+                if (process.HasExited)
+                    return;
+
+                if (graceful)
+                {
+                    _closeRequest.Set();
+
+                    var waited = Stopwatch.StartNew();
+                    while (!process.HasExited && waited.Elapsed < GracefulCloseTimeout)
+                        await Task.Delay(250);
+                }
+
+                if (!process.HasExited)
+                {
+                    _logger.LogWarning("[Updater] Force-stopping the launcher");
+                    process.Kill(true);
+                    process.WaitForExit(5000);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Updater] Could not close the launcher: {Message}", ex.Message);
+            }
+            finally
+            {
+                _closeRequest.Reset();
             }
         }
     }
