@@ -6,24 +6,58 @@ namespace Research_Arcade_Updater.Services
 {
     public sealed class FileLoggerProvider(string directory) : ILoggerProvider
     {
+        private static readonly TimeSpan NormalRetention = TimeSpan.FromDays(10);
+        private static readonly TimeSpan DebugRetention = TimeSpan.FromDays(3);
+
         private readonly string _directory = directory;
+        private readonly string _debugDirectory = Path.Combine(directory, "Debug");
         private readonly object _gate = new();
+        private DateTime _cleanedOn;
 
         public ILogger CreateLogger(string categoryName) => new FileLogger(this, categoryName);
 
         public void Dispose() { }
 
-        private void Write(string line)
+        private void Write(string line, bool normal)
         {
             lock (_gate)
             {
                 try
                 {
                     Directory.CreateDirectory(_directory);
+                    Directory.CreateDirectory(_debugDirectory);
+
+                    if (_cleanedOn != DateTime.Today)
+                    {
+                        _cleanedOn = DateTime.Today;
+                        Cleanup(_directory, "Updater-*.log", NormalRetention);
+                        Cleanup(_debugDirectory, "Updater-Debug-*.log", DebugRetention);
+                    }
+
+                    if (normal)
+                        File.AppendAllText(
+                            Path.Combine(_directory, $"Updater-{DateTime.Now:yyyyMMdd}.log"),
+                            line + Environment.NewLine
+                        );
+
                     File.AppendAllText(
-                        Path.Combine(_directory, $"Updater-{DateTime.Now:yyyyMMdd}.log"),
+                        Path.Combine(_debugDirectory, $"Updater-Debug-{DateTime.Now:yyyyMMdd}.log"),
                         line + Environment.NewLine
                     );
+                }
+                catch { }
+            }
+        }
+
+        private static void Cleanup(string directory, string pattern, TimeSpan retention)
+        {
+            var cutoff = DateTime.Now - retention;
+            foreach (var file in Directory.GetFiles(directory, pattern))
+            {
+                try
+                {
+                    if (File.GetLastWriteTime(file) < cutoff)
+                        File.Delete(file);
                 }
                 catch { }
             }
@@ -38,7 +72,7 @@ namespace Research_Arcade_Updater.Services
             public IDisposable BeginScope<TState>(TState state) where TState : notnull => null;
 
             public bool IsEnabled(LogLevel logLevel) =>
-                logLevel >= (_isFramework ? LogLevel.Warning : LogLevel.Information);
+                logLevel >= (_isFramework ? LogLevel.Information : LogLevel.Debug);
 
             public void Log<TState>(
                 LogLevel logLevel,
@@ -55,7 +89,10 @@ namespace Research_Arcade_Updater.Services
                 if (exception != null)
                     line += Environment.NewLine + exception;
 
-                provider.Write(line);
+                provider.Write(
+                    line,
+                    logLevel >= (_isFramework ? LogLevel.Warning : LogLevel.Information)
+                );
             }
         }
     }

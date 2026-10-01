@@ -132,7 +132,7 @@ namespace Research_Arcade_Updater
             Directory.CreateDirectory(Path.Combine(rootPath, "Launcher"));
 
             _host = Host.CreateDefaultBuilder()
-                .ConfigureLogging(logging => logging.AddProvider(new FileLoggerProvider(Path.Combine(rootPath, "Logs"))))
+                .ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Debug).AddProvider(new FileLoggerProvider(Path.Combine(rootPath, "Logs"))))
                 .ConfigureServices((context, services) => {
                     var host = config["ApiHost"]?.ToString() ?? "https://localhost:5001";
                     var user = config["ApiUser"]?.ToString() ?? "Research-Arcade-User";
