@@ -3,7 +3,9 @@
     <TargetFramework>net10.0-windows7.0</TargetFramework>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputType>WinExe</OutputType>
-    <RootNamespace>Research_Arcade_Updater</RootNamespace>
+    <RootNamespace>ArcademiaUpdater</RootNamespace>
+    <AssemblyName>Arcademia-Updater</AssemblyName>
+    <LegacyExeName>Research-Arcade-Updater</LegacyExeName>
     <UseWPF>true</UseWPF>
     <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -64,4 +66,10 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Resource>
   </ItemGroup>
+  <Target Name="CopyLegacyExeAfterBuild" AfterTargets="Build">
+    <Copy SourceFiles="$(OutDir)$(AssemblyName).exe" DestinationFiles="$(OutDir)$(LegacyExeName).exe" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyLegacyExeAfterPublish" AfterTargets="Publish">
+    <Copy SourceFiles="$(PublishDir)$(AssemblyName).exe" DestinationFiles="$(PublishDir)$(LegacyExeName).exe" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

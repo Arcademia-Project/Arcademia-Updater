@@ -9,7 +9,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 
-namespace Research_Arcade_Updater.Services
+namespace ArcademiaUpdater.Services
 {
     public sealed class InstallManifest
     {
@@ -35,8 +35,9 @@ namespace Research_Arcade_Updater.Services
 
     public sealed class LauncherInstaller
     {
-        public const string LauncherExeName = "Research-Arcade-Launcher.exe";
-        public const string LauncherProcessName = "Research-Arcade-Launcher";
+        public const string LauncherExeName = "Arcademia-Launcher.exe";
+        public const string LegacyLauncherExeName = "Research-Arcade-Launcher.exe";
+        private static readonly string[] LauncherExeNames = [LauncherExeName, LegacyLauncherExeName];
 
         private const string ManifestName = ".arcademia-install.json";
         private const string PackagePrefix = "launcher-";
@@ -83,7 +84,11 @@ namespace Research_Arcade_Updater.Services
         }
 
         public string LauncherDirectory => _launcherDir;
-        public string LauncherExePath => Path.Combine(_launcherDir, LauncherExeName);
+        public string LauncherExePath =>
+            LauncherExeNames
+                .Select(name => Path.Combine(_launcherDir, name))
+                .FirstOrDefault(File.Exists)
+            ?? Path.Combine(_launcherDir, LauncherExeName);
         private string ManifestPath => Path.Combine(_launcherDir, ManifestName);
 
         public InstallManifest ReadManifest()
@@ -228,7 +233,7 @@ namespace Research_Arcade_Updater.Services
                 if (Path.IsPathRooted(name) || name.Split('/').Contains(".."))
                     throw new InvalidDataException($"The package contains an unsafe path: {entry.Name}");
 
-                if (string.Equals(name, LauncherExeName, StringComparison.OrdinalIgnoreCase))
+                if (LauncherExeNames.Any(n => string.Equals(name, n, StringComparison.OrdinalIgnoreCase)))
                     hasLauncher = true;
             }
 
@@ -259,7 +264,7 @@ namespace Research_Arcade_Updater.Services
                 })
                 .ToList();
 
-            if (!stagedFiles.Any(f => string.Equals(f, LauncherExeName, StringComparison.OrdinalIgnoreCase)))
+            if (!stagedFiles.Any(f => LauncherExeNames.Any(n => string.Equals(f, n, StringComparison.OrdinalIgnoreCase))))
                 throw new InvalidDataException($"The extracted package does not contain {LauncherExeName}.");
 
             var manifest = new InstallManifest
@@ -374,7 +379,7 @@ namespace Research_Arcade_Updater.Services
 
         public void StopLaunchers(TimeSpan timeout)
         {
-            foreach (var process in Process.GetProcessesByName(LauncherProcessName))
+            foreach (var process in LauncherExeNames.SelectMany(n => Process.GetProcessesByName(Path.GetFileNameWithoutExtension(n))))
             {
                 using (process)
                 {

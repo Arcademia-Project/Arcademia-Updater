@@ -1,5 +1,5 @@
-# Research-Arcade-Updater
- A WPF App for the University of Lincoln Research Arcade Machines.
+# Arcademia-Updater
+ A WPF App for the Arcademia arcade machines.
 ## Setup
   Edit the Config.json file to your liking, the template file looks like this:
   ```
@@ -11,7 +11,7 @@
   }
   ```
   If you leave it this way, it will probably crash, I didn't test it because I'm a professional.
-### [Latest Release](https://github.com/Malphatt/Research-Arcade-Updater/releases/latest "GitHub.com")
+### [Latest Release](https://github.com/Arcademia-Project/Arcademia-Updater/releases/latest "GitHub.com")
 ## Information
-  This is the Updater for [Research-Arcade-Launcher](https://github.com/Malphatt/Research-Arcade-Launcher "GitHub.com").
+  This is the Updater for [Arcademia-Launcher](https://github.com/Arcademia-Project/Arcademia-Launcher "GitHub.com").
   Refer to the [Docs](https://github.com/Malphatt/Arcademia-Dev-Guide/wiki) for help.

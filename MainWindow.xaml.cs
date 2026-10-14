@@ -2,8 +2,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
-using Research_Arcade_Updater.Models;
-using Research_Arcade_Updater.Services;
+using ArcademiaUpdater.Models;
+using ArcademiaUpdater.Services;
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -15,7 +15,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 
-namespace Research_Arcade_Updater
+namespace ArcademiaUpdater
 {
     public partial class MainWindow : Window
     {

@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Research_Arcade_Updater.Classes
+namespace ArcademiaUpdater.Classes
 {
     struct Version : IComparable<Version>, IComparable
     {

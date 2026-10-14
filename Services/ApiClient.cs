@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Logging;
-using Research_Arcade_Updater.Models;
+using ArcademiaUpdater.Models;
 using System;
 using System.IO;
 using System.Net;
@@ -8,7 +8,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Research_Arcade_Updater.Services
+namespace ArcademiaUpdater.Services
 {
     public enum LatestLauncherStatus
     {

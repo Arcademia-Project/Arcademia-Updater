@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.IO;
 
-namespace Research_Arcade_Updater.Services
+namespace ArcademiaUpdater.Services
 {
     public sealed class FileLoggerProvider(string directory) : ILoggerProvider
     {

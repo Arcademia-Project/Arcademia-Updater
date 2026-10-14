@@ -1,4 +1,4 @@
-﻿namespace Research_Arcade_Updater.Models
+﻿namespace ArcademiaUpdater.Models
 {
     public enum UpdaterState
     {

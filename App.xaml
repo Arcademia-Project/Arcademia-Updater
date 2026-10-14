@@ -1,7 +1,7 @@
-﻿<Application x:Class="Research_Arcade_Updater.App"
+﻿<Application x:Class="ArcademiaUpdater.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:Research_Arcade_Updater"
+             xmlns:local="clr-namespace:ArcademiaUpdater"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
          
