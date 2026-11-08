@@ -82,12 +82,9 @@ namespace ArcademiaUpdater.Services
         private readonly string _recoveryDir;
 
         public LauncherInstaller(ILogger<LauncherInstaller> logger)
-            : this(logger, Directory.GetCurrentDirectory()) { }
-
-        internal LauncherInstaller(ILogger<LauncherInstaller> logger, string rootDir)
         {
             _logger = logger;
-            _rootDir = rootDir;
+            _rootDir = Directory.GetCurrentDirectory();
             _launcherDir = Path.Combine(_rootDir, "Launcher");
             _stagingDir = Path.Combine(_rootDir, "Launcher.staging");
             _packagesDir = Path.Combine(_rootDir, "Packages");

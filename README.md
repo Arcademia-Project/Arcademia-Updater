@@ -7,7 +7,7 @@
     "ApiHost": "https://example.com",
     "ApiUser": "ExampleUsername",
     "ApiPass": "ExamplePassword",
-    "NoInputTimeout_ms": 120000,
+    "NoInputTimeout_ms": 120000
   }
   ```
   If you leave it this way, it will probably crash, I didn't test it because I'm a professional.

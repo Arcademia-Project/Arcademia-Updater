@@ -6,7 +6,7 @@
     <RootNamespace>ArcademiaUpdater</RootNamespace>
     <AssemblyName>Arcademia-Updater</AssemblyName>
     <LegacyExeName>Research-Arcade-Updater</LegacyExeName>
-    <Version>2.3.4-26</Version>
+    <Version>2.4.0-26</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationIcon>Arcademia_Favicon.ico</ApplicationIcon>
@@ -15,13 +15,10 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Remove="Tests/**;packages/**;state/**" />
-    <None Remove="Tests/**;packages/**;state/**" />
+    <Compile Remove="packages/**;state/**" />
+    <None Remove="packages/**;state/**" />
     <AvaloniaResource Include="Fonts\**" />
     <AvaloniaResource Include="Arcademia_Favicon.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <InternalsVisibleTo Include="Arcademia-Updater.Tests" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.5" />

@@ -145,6 +145,10 @@ namespace ArcademiaUpdater
                             client.Timeout = TimeSpan.FromSeconds(30);
                             client.DefaultRequestHeaders.Authorization =
                                 new AuthenticationHeaderValue("ArcadeMachine", creds);
+                            client.DefaultRequestHeaders.Add(
+                                "X-Arcademia-Platform",
+                                OperatingSystem.IsWindows() ? "Windows" : "Linux"
+                            );
                         });
 
                     services.AddSingleton<LauncherInstaller>();

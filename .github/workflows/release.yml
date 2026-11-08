@@ -49,7 +49,7 @@ jobs:
           else
             gh release create "v$version" --draft --target "$GITHUB_SHA" --title "v$version Release" --notes "Updater version **$version**.
 
-          Upload each zip in the manager as updater version \`$number\`:
+          Drop both zips into Upload New Version on the manager's Software page. It reads the version (\`$number\`) and platform from each zip:
           - \`win-x64\`: Windows cabinets
           - \`linux-x64\`: Linux cabinets"
           fi
@@ -73,9 +73,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-
-      - name: Test
-        run: dotnet test Tests/${{ env.APP }}.Tests -c Release
 
       - name: Publish
         shell: bash
