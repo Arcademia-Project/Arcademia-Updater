@@ -1,5 +1,5 @@
 # Arcademia-Updater
- A WPF App for the Arcademia arcade machines.
+ An Avalonia app for the Arcademia arcade machines, running on Windows and Linux.
 ## Setup
   Edit the Config.json file to your liking, the template file looks like this:
   ```
