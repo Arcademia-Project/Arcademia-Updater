@@ -1,3 +1,7 @@
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Threading;
+using ArcademiaUpdater.Platform;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -5,7 +9,6 @@ using Newtonsoft.Json.Linq;
 using ArcademiaUpdater.Models;
 using ArcademiaUpdater.Services;
 using System;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http.Headers;
@@ -13,17 +16,11 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
 
 namespace ArcademiaUpdater
 {
     public partial class MainWindow : Window
     {
-        [DllImport("User32.dll")]
-        public static extern bool SetForegroundWindow(IntPtr hWnd);
-
-        private const string CloseRequestEventName = @"Local\Arcademia.Launcher.CloseRequested";
-
         private static readonly TimeSpan WindowTimeout = TimeSpan.FromSeconds(60);
         private static readonly TimeSpan HealthyAfter = TimeSpan.FromSeconds(60);
         private static readonly TimeSpan UnresponsiveLimit = TimeSpan.FromMinutes(3);
@@ -48,7 +45,8 @@ namespace ArcademiaUpdater
         private readonly string rootPath;
 
         private readonly CancellationTokenSource _shutdown = new();
-        private readonly EventWaitHandle _closeRequest;
+        private readonly LauncherSignals _signals;
+        private PosixSignalRegistration _terminateRegistration;
         private Task _supervisor = Task.CompletedTask;
         private bool _shutdownComplete;
 
@@ -58,10 +56,10 @@ namespace ArcademiaUpdater
             get => _state;
             set
             {
-                if (Application.Current != null && Application.Current.Dispatcher != null)
+                if (Avalonia.Application.Current != null)
                     try
                     {
-                        Application.Current.Dispatcher.Invoke(() => {
+                        Dispatcher.UIThread.Invoke(() => {
                             if (_state == value) return;
                             _state = value;
 
@@ -122,7 +120,7 @@ namespace ArcademiaUpdater
             if (!File.Exists(configPath))
             {
                 State = UpdaterState.failed;
-                MessageBox.Show("Config file not found");
+                StatusText.Text = "Config file not found";
                 return;
             }
 
@@ -158,8 +156,14 @@ namespace ArcademiaUpdater
             _updater = _host.Services.GetRequiredService<IUpdaterService>();
             _updater.StateChanged += Updater_StateChanged;
 
-            _closeRequest = new EventWaitHandle(false, EventResetMode.AutoReset, CloseRequestEventName);
-            _closeRequest.Reset();
+            _signals = new LauncherSignals(rootPath);
+
+            if (!OperatingSystem.IsWindows())
+                _terminateRegistration = PosixSignalRegistration.Create(PosixSignal.SIGTERM, context =>
+                {
+                    context.Cancel = true;
+                    Dispatcher.UIThread.Post(Close);
+                });
 
             _logger.LogInformation("[Updater] Started in {Root}", rootPath);
 
@@ -171,7 +175,7 @@ namespace ArcademiaUpdater
 
         private void Updater_StateChanged(object sender, LauncherStateChangedEventArgs e) => State = e.NewState;
 
-        private async void Window_Closing(object sender, CancelEventArgs e)
+        private async void Window_Closing(object sender, WindowClosingEventArgs e)
         {
             if (_shutdownComplete)
                 return;
@@ -193,8 +197,14 @@ namespace ArcademiaUpdater
                 _host.Dispose();
             }
 
+            _signals?.Dispose();
+            _terminateRegistration?.Dispose();
+
             _shutdownComplete = true;
-            Application.Current.Shutdown();
+            if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+                desktop.Shutdown();
+            else
+                Close();
         }
 
         private async Task SuperviseAsync(CancellationToken cancellationToken)
@@ -284,7 +294,7 @@ namespace ArcademiaUpdater
                 return LauncherOutcome.StartFailed;
 
             State = UpdaterState.startingLauncher;
-            _closeRequest.Reset();
+            _signals.PrepareForStart();
 
             Process process;
             try
@@ -339,13 +349,13 @@ namespace ArcademiaUpdater
 
                     if (!windowShown)
                     {
-                        if (process.MainWindowHandle != IntPtr.Zero)
+                        if (_signals.HasWindow(process))
                         {
                             windowShown = true;
                             _logger.LogInformation("[Updater] Launcher window shown after {Seconds:N1}s", runTime.Elapsed.TotalSeconds);
 
                             // Bring the launcher to the front
-                            SetForegroundWindow(process.MainWindowHandle);
+                            _signals.BringToFront(process);
                             State = UpdaterState.idle;
                         }
                         else if (runTime.Elapsed > WindowTimeout)
@@ -355,7 +365,7 @@ namespace ArcademiaUpdater
                             return LauncherOutcome.Hung;
                         }
                     }
-                    else if (process.Responding)
+                    else if (_signals.IsResponding(process))
                     {
                         unresponsiveFor = null;
                     }
@@ -420,7 +430,7 @@ namespace ArcademiaUpdater
 
                 if (graceful)
                 {
-                    _closeRequest.Set();
+                    _signals.RequestClose(process);
 
                     var waited = Stopwatch.StartNew();
                     while (!process.HasExited && waited.Elapsed < GracefulCloseTimeout)
@@ -440,7 +450,7 @@ namespace ArcademiaUpdater
             }
             finally
             {
-                _closeRequest.Reset();
+                _signals.ResetCloseRequest();
             }
         }
     }

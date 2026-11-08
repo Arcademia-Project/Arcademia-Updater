@@ -1,75 +1,47 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0-windows7.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputType>WinExe</OutputType>
     <RootNamespace>ArcademiaUpdater</RootNamespace>
     <AssemblyName>Arcademia-Updater</AssemblyName>
     <LegacyExeName>Research-Arcade-Updater</LegacyExeName>
-    <UseWPF>true</UseWPF>
-    <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
+    <Version>2.3.4-26</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationIcon>Arcademia_Favicon.ico</ApplicationIcon>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="Arcademia_Favicon.ico" />
+    <Compile Remove="Tests/**;packages/**;state/**" />
+    <None Remove="Tests/**;packages/**;state/**" />
+    <AvaloniaResource Include="Fonts\**" />
+    <AvaloniaResource Include="Arcademia_Favicon.ico" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.6" />
-    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Diagnostics" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Diagnostics.Abstractions" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Abstractions" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Physical" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Configuration" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Logging.EventLog" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Logging.EventSource" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Primitives" Version="9.0.6" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <InternalsVisibleTo Include="Arcademia-Updater.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Themes.Simple" Version="12.1.5" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="SharpZipLib" Version="1.4.2" />
-    <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
-    <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
-    <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="9.0.6" />
-    <PackageReference Include="System.IO.Pipelines" Version="9.0.6" />
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
-    <PackageReference Include="System.Text.Encodings.Web" Version="9.0.6" />
-    <PackageReference Include="System.Text.Json" Version="9.0.6" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Config.json">
+    <None Include="Config.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Fonts\Early GameBoy.ttf">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Fonts\Press Start 2P.ttf">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
+    </None>
   </ItemGroup>
-  <Target Name="CopyLegacyExeAfterBuild" AfterTargets="Build">
+  <Target Name="CopyLegacyExeAfterBuild" AfterTargets="Build" Condition="Exists('$(OutDir)$(AssemblyName).exe')">
     <Copy SourceFiles="$(OutDir)$(AssemblyName).exe" DestinationFiles="$(OutDir)$(LegacyExeName).exe" SkipUnchangedFiles="true" />
   </Target>
-  <Target Name="CopyLegacyExeAfterPublish" AfterTargets="Publish">
+  <Target Name="CopyLegacyExeAfterPublish" AfterTargets="Publish" Condition="Exists('$(PublishDir)$(AssemblyName).exe')">
     <Copy SourceFiles="$(PublishDir)$(AssemblyName).exe" DestinationFiles="$(PublishDir)$(LegacyExeName).exe" SkipUnchangedFiles="true" />
   </Target>
 </Project>

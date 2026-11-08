@@ -1,0 +1,18 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ArcademiaUpdater"
+        x:Class="ArcademiaUpdater.MainWindow"
+        WindowStartupLocation="CenterScreen"
+        CanResize="False"
+        WindowDecorations="None"
+        Icon="/Arcademia_Favicon.ico"
+        Background="Black"
+        Title="Updater" Height="450" Width="800">
+    <Window.Resources>
+        <FontFamily x:Key="EarlyGameBoy">avares://Arcademia-Updater/Fonts#Press Start 2P</FontFamily>
+    </Window.Resources>
+    <Grid Background="Black">
+        <TextBlock x:Name="StatusText" Text="Awaiting Instructions..." Foreground="White" FontSize="18" FontFamily="{StaticResource EarlyGameBoy}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        <TextBlock x:Name="VersionText" Text="{x:Static local:AppInfo.VersionLabel}" Foreground="#777" FontSize="8" FontFamily="{StaticResource EarlyGameBoy}" Margin="10" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
+    </Grid>
+</Window>
