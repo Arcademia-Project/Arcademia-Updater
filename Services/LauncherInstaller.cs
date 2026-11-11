@@ -35,9 +35,16 @@ namespace ArcademiaUpdater.Services
 
     public sealed class LauncherInstaller
     {
-        public const string LauncherExeName = "Arcademia-Launcher.exe";
+        public static readonly string LauncherExeName = OperatingSystem.IsWindows() ? "Arcademia-Launcher.exe" : "Arcademia-Launcher";
         public const string LegacyLauncherExeName = "Research-Arcade-Launcher.exe";
-        private static readonly string[] LauncherExeNames = [LauncherExeName, LegacyLauncherExeName];
+        private static readonly string[] LauncherExeNames = OperatingSystem.IsWindows()
+            ? [LauncherExeName, LegacyLauncherExeName]
+            : [LauncherExeName];
+
+        private const UnixFileMode ExecutableMode =
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+            | UnixFileMode.GroupRead | UnixFileMode.GroupExecute
+            | UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
 
         private const string ManifestName = ".arcademia-install.json";
         private const string PackagePrefix = "launcher-";
@@ -50,6 +57,7 @@ namespace ArcademiaUpdater.Services
             "*.deps.json",
             "*.runtimeconfig.json",
             "*.dll.config",
+            "*.so",
         ];
 
         private static readonly string[] StateFiles = ["session_current.json", "session_queue.json"];
@@ -150,6 +158,8 @@ namespace ArcademiaUpdater.Services
                     return InstallHealth.Corrupt;
                 }
             }
+
+            EnsureExecutable();
 
             reason = null;
             return InstallHealth.Verified;
@@ -322,6 +332,8 @@ namespace ArcademiaUpdater.Services
                 File.Move(Path.Combine(_stagingDir, relativePath), target, true);
             }
 
+            EnsureExecutable();
+
             var manifestTemp = ManifestPath + ".tmp";
             File.WriteAllText(manifestTemp, JsonSerializer.Serialize(manifest, JsonOptions));
             File.Move(manifestTemp, ManifestPath, true);
@@ -396,6 +408,26 @@ namespace ArcademiaUpdater.Services
                     {
                         _logger.LogWarning("[Installer] Could not stop launcher process: {Message}", ex.Message);
                     }
+                }
+            }
+        }
+
+        public void EnsureExecutable()
+        {
+            if (OperatingSystem.IsWindows())
+                return;
+
+            foreach (var name in LauncherExeNames.Append("createdump"))
+            {
+                var path = Path.Combine(_launcherDir, name);
+                try
+                {
+                    if (File.Exists(path) && (File.GetUnixFileMode(path) & UnixFileMode.UserExecute) == 0)
+                        File.SetUnixFileMode(path, File.GetUnixFileMode(path) | ExecutableMode);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("[Installer] Could not mark {File} as executable: {Message}", name, ex.Message);
                 }
             }
         }
