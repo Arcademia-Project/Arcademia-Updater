@@ -68,7 +68,7 @@ namespace ArcademiaUpdater.Classes
             return subMinor.CompareTo(other.subMinor);
         }
 
-        readonly int IComparable.CompareTo(object? obj)
+        readonly int IComparable.CompareTo(object obj)
         {
             if (obj is not Version)
                 throw new ArgumentException("Can only compare to another Version");
